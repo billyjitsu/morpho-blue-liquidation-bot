@@ -1,11 +1,12 @@
 import type { Address, Hex } from "viem";
+
 import type { LiquidatablePosition } from "./types";
 
 export async function fetchWhiteListedMarketsForVault(
   chainId: number,
   vaultAddress: Address,
 ): Promise<Hex[]> {
-  const url = `http://localhost:42069/chain/${chainId}/vault/${vaultAddress}`;
+  const url = `http://localhost:42069/chain/${String(chainId)}/vault/${vaultAddress}`;
 
   const response = await fetch(url);
 
@@ -22,7 +23,7 @@ export async function fetchLiquidatablePositions(
   chainId: number,
   marketIds: Hex[],
 ): Promise<LiquidatablePosition[]> {
-  const url = `http://localhost:42069/chain/${chainId}/liquidatable-positions`;
+  const url = `http://localhost:42069/chain/${String(chainId)}/liquidatable-positions`;
 
   const response = await fetch(url, {
     method: "POST",
