@@ -3,8 +3,6 @@ import {
   Api3ServerV1__factory,
   AirseekerRegistry__factory,
 } from "@api3/contracts";
-import * as dotenv from "dotenv";
-dotenv.config();
 import {
   createPublicClient,
   http,
@@ -16,6 +14,7 @@ import {
   Address,
   Hex,
 } from "viem";
+import "dotenv/config";
 
 interface PriceDetail {
   /** Airnode address */
@@ -81,12 +80,15 @@ function calculateMedianPrice(priceDetails: PriceDetail[]): number {
     const lowerValue = values[len / 2 - 1];
     const upperValue = values[len / 2];
 
-    // Use nullish coalescing to ensure values are defined
-    return ((lowerValue ?? 0) + (upperValue ?? 0)) / 2;
+    // Use type guards to ensure values are defined
+    if (lowerValue !== undefined && upperValue !== undefined) {
+      return (lowerValue + upperValue) / 2;
+    }
+    return 0; // Fallback
   } else {
     // Odd number of elements
     const middleValue = values[Math.floor(len / 2)];
-    return middleValue ?? 0; // Using nullish coalescing instead of ternary
+    return middleValue ?? 0;
   }
 }
 
@@ -208,10 +210,10 @@ export async function fetchOEVSignedData(DAPI_NAME: string): Promise<{
             const decodedValueUSD = Number(decodedValueWei) / 1e18;
 
             priceDetails.push({
-              airnode: airnode, // Now using the safely checked airnode variable
-              encodedValue: toHex(latestUpdate.encodedValue),
-              signature: toHex(latestUpdate.signature),
-              templateId: templateId, // Now using the safely checked templateId variable
+              airnode: airnode,
+              encodedValue: latestUpdate.encodedValue as Hex,
+              signature: latestUpdate.signature as Hex,
+              templateId: templateId,
               templateIdOEV: latestUpdate.templateId,
               timestamp: latestUpdate.timestamp,
               decodedValue: decodedValueUSD,
@@ -228,16 +230,44 @@ export async function fetchOEVSignedData(DAPI_NAME: string): Promise<{
       }
     }
 
-    // Calculate median price
-    const medianPrice = calculateMedianPrice(priceDetails);
+    const validPriceDetails = priceDetails.filter((detail) => {
+      // Validate timestamp is a valid number
+      const timestamp = parseInt(detail.timestamp);
+      if (isNaN(timestamp)) {
+        console.log(`Invalid timestamp for airnode ${detail.airnode}, skipping`);
+        return false;
+      }
+
+      // Validate the encoded value is a valid hex
+      if (!detail.encodedValue.startsWith("0x")) {
+        console.log(`Invalid encodedValue for airnode ${detail.airnode}, skipping`);
+        return false;
+      }
+
+      // Validate the signature is a valid hex
+      if (!detail.signature.startsWith("0x")) {
+        console.log(`Invalid signature for airnode ${detail.airnode}, skipping`);
+        return false;
+      }
+
+      return true;
+    });
+
+    console.log(
+      `Filtered from ${priceDetails.length.toString()} to ${validPriceDetails.length.toString()} valid price details`,
+    );
+
+    // Calculate median price from valid details
+    const medianPrice = calculateMedianPrice(validPriceDetails);
     console.log("Median Price:", medianPrice);
 
-    // Encode price update details
-    const priceUpdateDetailsEncoded = priceDetails.map((priceUpdate) => {
+    // Encode only valid price update details
+    const priceUpdateDetailsEncoded = validPriceDetails.map((priceUpdate) => {
+      const timestamp = BigInt(priceUpdate.timestamp);
       return encodeAbiParameters(parseAbiParameters("address, bytes32, uint256, bytes, bytes"), [
         priceUpdate.airnode,
         priceUpdate.templateId,
-        BigInt(priceUpdate.timestamp),
+        timestamp,
         priceUpdate.encodedValue,
         priceUpdate.signature,
       ]);
